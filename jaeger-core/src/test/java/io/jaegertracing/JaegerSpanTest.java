@@ -40,11 +40,17 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
+import uk.org.lidalia.slf4jext.Level;
+import uk.org.lidalia.slf4jtest.LoggingEvent;
+import uk.org.lidalia.slf4jtest.TestLogger;
+import uk.org.lidalia.slf4jtest.TestLoggerFactory;
 
 public class JaegerSpanTest {
+  private static final TestLogger log = TestLoggerFactory.getTestLogger(JaegerSpan.class);
   private Clock clock;
   private InMemoryReporter reporter;
   private JaegerTracer tracer;
@@ -67,6 +73,11 @@ public class JaegerSpanTest {
             .withExpandExceptionLogs()
             .build();
     jaegerSpan = tracer.buildSpan("some-operation").start();
+  }
+
+  @After
+  public void clearLoggers() {
+    TestLoggerFactory.clear();
   }
 
   @Test
@@ -114,6 +125,16 @@ public class JaegerSpanTest {
   }
 
   @Test
+  public void testSetOperationNameAfterrFinish() {
+    String unexpected = "modified.operation";
+
+    assertEquals("some-operation", jaegerSpan.getOperationName());
+    jaegerSpan.finish();
+    jaegerSpan.setOperationName(unexpected);
+    assertEquals("some-operation", jaegerSpan.getOperationName());
+  }
+
+  @Test
   public void testSetStringTag() {
     String expected = "expected.value";
     String key = "tag.key";
@@ -129,6 +150,16 @@ public class JaegerSpanTest {
 
     jaegerSpan.setTag(key, expected);
     assertEquals(expected, jaegerSpan.getTags().get(key));
+  }
+
+  @Test
+  public void testSetStringTagAfterFinish() {
+    String value = "unexpected.value";
+    String key = "tag.key";
+
+    jaegerSpan.finish();
+    jaegerSpan.setTag(key, value);
+    assertEquals(null, jaegerSpan.getTags().get(key));
   }
 
   @Test
@@ -278,6 +309,28 @@ public class JaegerSpanTest {
   }
 
   @Test
+  public void testLogAfterFinish() {
+    final long expectedTimestamp = 2222;
+    final String expectedLog = "some-log";
+    final String expectedEvent = "expectedEvent";
+
+    when(clock.currentTimeMicros()).thenReturn(expectedTimestamp);
+
+    jaegerSpan.finish();
+    jaegerSpan.log(expectedEvent);
+    assertNull(jaegerSpan.getLogs());
+  }
+
+  @Test
+  public void testLogWithTimestampAfterFinish() {
+    Map<String, String> unexpectedFields = Collections.singletonMap("foo", "bar");
+
+    jaegerSpan.finish();
+    jaegerSpan.log(2222, unexpectedFields);
+    assertNull(jaegerSpan.getLogs());
+  }
+
+  @Test
   public void testSpanDetectsSamplingPriorityGreaterThanZero() {
     JaegerSpan jaegerSpan = tracer.buildSpan("test-service-operation").start();
     Tags.SAMPLING_PRIORITY.set(jaegerSpan, 1);
@@ -362,6 +415,14 @@ public class JaegerSpanTest {
   }
 
   @Test
+  public void testSetBaggageAfterFinish() {
+    jaegerSpan.finish();
+    jaegerSpan.setBaggageItem("foo", "bar");
+
+    assertNull(jaegerSpan.getBaggageItem("foo"));
+  }
+
+  @Test
   public void testExpandExceptionLogs() {
     RuntimeException ex = new RuntimeException(new NullPointerException("npe"));
     Map<String, Object> logs = new HashMap<>();
@@ -437,6 +498,38 @@ public class JaegerSpanTest {
     assertEquals(1, logData.size());
     assertEquals(1, logData.get(0).getFields().size());
     assertEquals(ex, logData.get(0).getFields().get(Fields.ERROR_OBJECT));
+  }
+
+  @Test
+  public void testNoLoggingingStackTracesOnDebug() {
+    log.setEnabledLevels(Level.WARN);
+    JaegerSpan jaegerSpan = tracer.buildSpan("foo").start();
+    jaegerSpan.finish();
+    jaegerSpan.finish();
+
+    assertEquals(1, log.getLoggingEvents().size());
+    LoggingEvent event = log.getLoggingEvents().get(0);
+    assertEquals("Span has already been finished; cannot {}.", event.getMessage());
+    assertEquals(Level.WARN, event.getLevel());
+    assertEquals(false, event.getThrowable().isPresent());
+  }
+
+  @Test
+  public void testLoggingingStackTracesOnDebug() {
+    log.setEnabledLevels(Level.WARN, Level.DEBUG);
+    JaegerSpan jaegerSpan = tracer.buildSpan("foo").start();
+    jaegerSpan.finish();
+    jaegerSpan.finish();
+
+    assertEquals(2, log.getLoggingEvents().size());
+    LoggingEvent event = log.getLoggingEvents().get(0);
+    assertEquals("Span has already been finished; cannot {}.", event.getMessage());
+    assertEquals(Level.WARN, event.getLevel());
+    assertEquals(false, event.getThrowable().isPresent());
+    event = log.getLoggingEvents().get(1);
+    assertEquals("Generating stack trace because we cannot {}.", event.getMessage());
+    assertEquals(Level.DEBUG, event.getLevel());
+    assertEquals("Called from:", event.getThrowable().get().getMessage());
   }
 
   @Test

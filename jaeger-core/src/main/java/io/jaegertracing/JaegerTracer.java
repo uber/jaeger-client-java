@@ -226,7 +226,7 @@ public class JaegerTracer implements Tracer, Closeable {
     private final Map<String, Object> tags = new HashMap<String, Object>();
     private boolean ignoreActiveSpan = false;
 
-    SpanBuilder(String operationName) {
+    private SpanBuilder(String operationName) {
       this.operationName = operationName;
     }
 

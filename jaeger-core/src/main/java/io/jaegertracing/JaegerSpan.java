@@ -99,6 +99,10 @@ public class JaegerSpan implements Span {
   @Override
   public JaegerSpan setOperationName(String operationName) {
     synchronized (this) {
+      if (spanAlreadyFinished("set operation name")) {
+        return this;
+      }
+
       this.operationName = operationName;
     }
     return this;
@@ -132,6 +136,10 @@ public class JaegerSpan implements Span {
       return this;
     }
     synchronized (this) {
+      if (spanAlreadyFinished("set baggage item")) {
+        return this;
+      }
+
       context = tracer.setBaggage(this, key, value);
       return this;
     }
@@ -176,10 +184,10 @@ public class JaegerSpan implements Span {
 
   private void finishWithDuration(long durationMicros) {
     synchronized (this) {
-      if (finished) {
-        log.warn("Span has already been finished; will not be reported again.");
+      if (spanAlreadyFinished("finish")) {
         return;
       }
+
       finished = true;
 
       this.durationMicroseconds = durationMicros;
@@ -206,6 +214,10 @@ public class JaegerSpan implements Span {
   }
 
   private JaegerSpan setTagAsObject(String key, Object value) {
+    if (spanAlreadyFinished("set tag")) {
+      return this;
+    }
+
     if (key.equals(Tags.SAMPLING_PRIORITY.getKey()) && (value instanceof Number)) {
       int priority = ((Number) value).intValue();
       byte newFlags;
@@ -233,6 +245,10 @@ public class JaegerSpan implements Span {
   @Override
   public JaegerSpan log(long timestampMicroseconds, Map<String, ?> fields) {
     synchronized (this) {
+      if (spanAlreadyFinished("log")) {
+        return this;
+      }
+
       if (fields == null) {
         return this;
       }
@@ -257,6 +273,10 @@ public class JaegerSpan implements Span {
   @Override
   public JaegerSpan log(long timestampMicroseconds, String event) {
     synchronized (this) {
+      if (spanAlreadyFinished("log")) {
+        return this;
+      }
+
       if (event == null) {
         return this;
       }
@@ -268,6 +288,18 @@ public class JaegerSpan implements Span {
       }
       return this;
     }
+  }
+
+  private boolean spanAlreadyFinished(String methodName) {
+    if (finished) {
+      log.warn("Span has already been finished; cannot {}.", methodName);
+      if (log.isDebugEnabled()) {
+        log.debug("Generating stack trace because we cannot {}.", methodName, new RuntimeException("Called from:"));
+      }
+      return true;
+    }
+
+    return false;
   }
 
   /**

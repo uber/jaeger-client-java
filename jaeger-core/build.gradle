@@ -13,8 +13,8 @@ dependencies {
     testCompile group: 'org.mockito', name: 'mockito-core', version: mockitoVersion
     testCompile group: 'com.tngtech.java', name: 'junit-dataprovider', version: junitDataProviderVersion
     testCompile group: 'org.awaitility', name: 'awaitility', version: awaitilityVersion
-    testCompile group: 'ch.qos.logback', name: 'logback-classic', version: logbackVersion
     testCompile group: 'io.micrometer', name: 'micrometer-registry-prometheus', version: micrometerVersion
+    testCompile group: 'uk.org.lidalia', name: 'slf4j-test', version: '1.2.0'
 
     signature 'org.codehaus.mojo.signature:java16:1.1@signature'
 }
