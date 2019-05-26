@@ -40,11 +40,16 @@ public class SenderResolver {
 
   /**
    * Resolves a sender by passing the given {@link Configuration.SenderConfiguration} down to the
-   * {@link SenderFactory}. The factory is loaded either based on the value from the environment variable
-   * {@link Configuration#JAEGER_SENDER_FACTORY} or, in its absence or failure to deliver a {@link Sender},
+   * {@link SenderFactory}. The factory is loaded either based on the value from sender configuration
+   * {@link Configuration.SenderConfiguration#senderFactory},
+   * or the environment variable {@link Configuration#JAEGER_SENDER_FACTORY},
+   * or, in its absence or failure to deliver a {@link Sender},
    * via the {@link ServiceLoader}. If no factories are found, a {@link NoopSender} is returned. If multiple factories
-   * are available, the factory whose {@link SenderFactory#getType()} matches the JAEGER_SENDER_FACTORY env var is
+   * are available, the factory whose {@link SenderFactory#getType()} matches the
+   * {@link Configuration.SenderConfiguration#senderFactory} value (or the JAEGER_SENDER_FACTORY env var) is
    * selected. If none matches, {@link NoopSender} is returned.
+   * Using {@link Configuration#JAEGER_SENDER_FACTORY} is deprecated in favor of
+   * {@link Configuration.SenderConfiguration#senderFactory}
    *
    * @param senderConfiguration the configuration to pass down to the factory
    * @return the resolved Sender, or NoopSender
@@ -65,9 +70,13 @@ public class SenderResolver {
       }
 
       if (hasMultipleFactories) {
-        // we compare the factory name with JAEGER_SENDER_FACTORY, as a way to know which
+        // we compare the factory name with the requested configuration, as a way to know which
         // factory the user wants:
-        String requestedFactory = System.getProperty(Configuration.JAEGER_SENDER_FACTORY);
+        String requestedFactory = senderConfiguration.getSenderFactory();
+        if (requestedFactory == null) {
+          /* backward compatibility */
+          requestedFactory = System.getProperty(Configuration.JAEGER_SENDER_FACTORY);
+        }
         if (senderFactory.getType().equals(requestedFactory)) {
           log.debug(
               String.format("Found the requested (%s) sender factory: %s",

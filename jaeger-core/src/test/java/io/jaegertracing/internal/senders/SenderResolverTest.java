@@ -21,7 +21,6 @@ import static org.junit.Assert.assertTrue;
 import io.jaegertracing.Configuration;
 import io.jaegertracing.internal.JaegerSpan;
 import io.jaegertracing.spi.Sender;
-import io.jaegertracing.spi.SenderFactory;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -94,7 +93,35 @@ public class SenderResolverTest {
     assertTrue(sender instanceof InMemorySender);
   }
 
+  @Test
+  public void testResolveFromSenderConfiguration() throws Exception {
+    Configuration.SenderConfiguration senderConfiguration =
+            new Configuration.SenderConfiguration().withSenderFactory("in-memory");
+    Sender sender =
+            getSenderForServiceFileContents("\nio.jaegertracing.internal.senders.InMemorySenderFactory",
+                    true,
+                    senderConfiguration);
+    assertTrue(sender instanceof InMemorySender);
+  }
+
+  @Test
+  public void testResolveFromSystemProperty() throws Exception {
+    System.setProperty(Configuration.JAEGER_SENDER_FACTORY, "in-memory");
+    Configuration.SenderConfiguration senderConfiguration = new Configuration.SenderConfiguration();
+    Sender sender =
+            getSenderForServiceFileContents("\nio.jaegertracing.internal.senders.InMemorySenderFactory",
+                    true,
+                    senderConfiguration);
+    assertTrue(sender instanceof InMemorySender);
+  }
+
   private Sender getSenderForServiceFileContents(String contents, boolean append) throws Exception {
+    return getSenderForServiceFileContents(contents, append, null);
+  }
+
+  private Sender getSenderForServiceFileContents(String contents,
+                                                 boolean append,
+                                                 Configuration.SenderConfiguration configuration) throws Exception {
     String serviceFilePath = "/META-INF/services/io.jaegertracing.spi.SenderFactory";
     File original = new File(this.getClass().getResource(serviceFilePath).toURI());
 
@@ -117,6 +144,9 @@ public class SenderResolverTest {
       os.write(newContent.getBytes(Charset.defaultCharset()));
       os.close();
 
+      if (configuration != null) {
+        return SenderResolver.resolve(configuration);
+      }
       return SenderResolver.resolve();
     } finally {
       Files.move(copy, original.toPath(), REPLACE_EXISTING);

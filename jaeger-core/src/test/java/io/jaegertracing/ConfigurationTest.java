@@ -76,6 +76,7 @@ public class ConfigurationTest {
     System.clearProperty(Configuration.JAEGER_PASSWORD);
     System.clearProperty(Configuration.JAEGER_PROPAGATION);
     System.clearProperty(Configuration.JAEGER_TRACEID_128BIT);
+    System.clearProperty(Configuration.JAEGER_SENDER_FACTORY);
 
     System.clearProperty(TEST_PROPERTY);
   }
@@ -210,6 +211,14 @@ public class ConfigurationTest {
   public void testSenderInstanceIsCached() {
     SenderConfiguration senderConfiguration = SenderConfiguration.fromEnv();
     assertEquals(senderConfiguration.getSender(), senderConfiguration.getSender());
+  }
+
+  @Test
+  public void testSenderFactoryIsReadFromProperty() {
+    String senderFactoryType = "sender-factory";
+    System.setProperty(Configuration.JAEGER_SENDER_FACTORY, senderFactoryType);
+    SenderConfiguration senderConfiguration = SenderConfiguration.fromEnv();
+    assertEquals(senderConfiguration.getSenderFactory(), senderFactoryType);
   }
 
   @Test

@@ -650,6 +650,11 @@ public class Configuration {
      */
     private String authPassword;
 
+    /**
+     * The SenderFactory type to use if multiple are found by {@link io.jaegertracing.internal.senders.SenderResolver}
+     */
+    private String senderFactory;
+
     public SenderConfiguration() {
     }
 
@@ -683,6 +688,11 @@ public class Configuration {
       return this;
     }
 
+    public SenderConfiguration withSenderFactory(String senderFactory) {
+      this.senderFactory = senderFactory;
+      return this;
+    }
+
     /**
      * Returns a sender if one was given when creating the configuration, or attempts to create a sender based on the
      * configuration's state.
@@ -708,13 +718,16 @@ public class Configuration {
       String authUsername = getProperty(JAEGER_USER);
       String authPassword = getProperty(JAEGER_PASSWORD);
 
+      String senderFactory = getProperty(JAEGER_SENDER_FACTORY);
+
       return new SenderConfiguration()
               .withAgentHost(agentHost)
               .withAgentPort(agentPort)
               .withEndpoint(collectorEndpoint)
               .withAuthToken(authToken)
               .withAuthUsername(authUsername)
-              .withAuthPassword(authPassword);
+              .withAuthPassword(authPassword)
+              .withSenderFactory(senderFactory);
     }
   }
 
