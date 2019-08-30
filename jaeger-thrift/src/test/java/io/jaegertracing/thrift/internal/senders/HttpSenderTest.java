@@ -52,6 +52,7 @@ public class HttpSenderTest extends JerseyTest {
     System.clearProperty(Configuration.JAEGER_AUTH_TOKEN);
     System.clearProperty(Configuration.JAEGER_USER);
     System.clearProperty(Configuration.JAEGER_PASSWORD);
+    System.clearProperty(Configuration.JAEGER_TLS_CERTIFICATE_PINNING);
   }
 
   @Override
@@ -83,6 +84,10 @@ public class HttpSenderTest extends JerseyTest {
     new HttpSender.Builder("misconfiguredUrl").build();
   }
 
+  @Test(expected = IllegalArgumentException.class)
+  public void misconfiguredQuery() throws Exception {
+    new HttpSender.Builder("http://some-server/api/traces^there=is&another=query").build();
+  }
   @Test(expected = Exception.class)
   public void serverDoesntExist() throws Exception {
     HttpSender sender = new HttpSender.Builder("http://some-server/api/traces")
@@ -119,6 +124,17 @@ public class HttpSenderTest extends JerseyTest {
   public void sendWithTokenAuth() throws Exception {
     System.setProperty(Configuration.JAEGER_ENDPOINT, target("/api/bearer").getUri().toString());
     System.setProperty(Configuration.JAEGER_AUTH_TOKEN, "thetoken");
+
+    HttpSender sender = (HttpSender) Configuration.SenderConfiguration.fromEnv().getSender();
+    sender.send(new Process("robotrock"), generateSpans());
+  }
+
+  @Test
+  public void sendPlainHttpWithCertificatePinning() throws Exception {
+    System.setProperty(Configuration.JAEGER_ENDPOINT, target("/api/traces").getUri().toString());
+    // Just confirm this is settable. Crossdock is used for TLS-level test.
+    System.setProperty(Configuration.JAEGER_TLS_CERTIFICATE_PINNING,
+            "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=,sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=");
 
     HttpSender sender = (HttpSender) Configuration.SenderConfiguration.fromEnv().getSender();
     sender.send(new Process("robotrock"), generateSpans());

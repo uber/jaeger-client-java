@@ -26,6 +26,10 @@ public class ThriftSenderFactory implements SenderFactory {
         httpSenderBuilder.withAuth(conf.getAuthToken());
       }
 
+      if (null != conf.getServerCertificateHashes() && 0 != conf.getServerCertificateHashes().length) {
+        httpSenderBuilder.withCertificatePinning(conf.getServerCertificateHashes());
+      }
+
       log.debug("Using the HTTP Sender to send spans directly to the endpoint.");
       return httpSenderBuilder.build();
     }

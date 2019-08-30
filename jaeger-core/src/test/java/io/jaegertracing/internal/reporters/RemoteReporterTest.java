@@ -31,6 +31,7 @@ import io.jaegertracing.internal.reporters.RemoteReporter.Builder;
 import io.jaegertracing.internal.samplers.ConstSampler;
 import io.jaegertracing.internal.senders.InMemorySender;
 import io.jaegertracing.spi.Reporter;
+import io.jaegertracing.spi.Sender;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -327,5 +328,57 @@ public class RemoteReporterTest {
 
   private JaegerSpan newSpan() {
     return tracer.buildSpan("x").start();
+  }
+
+  private static class FailingSender implements Sender {
+    private static boolean invoked = false;
+
+    @Override
+    public int append(JaegerSpan span) throws SenderException {
+      invoked = true;
+      throw new SenderException("FailingSender is to fail", 1);
+    }
+
+    @Override
+    public int flush() throws SenderException {
+      throw new SenderException("FailingSender is to fail", 1);
+    }
+
+    @Override
+    public int close() throws SenderException {
+      throw new SenderException("FailingSender is to fail", 1);
+    }
+
+    public boolean invoked() {
+      return invoked;
+    }
+  }
+
+  @Test
+  public void testReporterWithSenderException() {
+    FailingSender failingSender = new FailingSender();
+    Reporter failingReporter = new RemoteReporter.Builder()
+        .withSender(failingSender)
+        .withFlushInterval(flushInterval)
+        .withMaxQueueSize(maxQueueSize)
+        .withMetrics(metrics)
+        .build();
+    JaegerTracer failingTracer = new JaegerTracer.Builder("test-failing-reporter")
+        .withReporter(failingReporter)
+        .withSampler(new ConstSampler(true))
+        .withMetrics(metrics)
+        .build();
+    JaegerSpan span = failingTracer.buildSpan("raza").start();
+    failingReporter.report(span);
+    // do sleep until automatic flush happens on 'reporter'
+    // added 20ms on top of 'flushInterval' to avoid corner cases
+    await()
+        .with()
+        .pollInterval(1, TimeUnit.MILLISECONDS)
+        .atMost(flushInterval + 20, TimeUnit.MILLISECONDS)
+        .until(() -> failingSender.invoked());
+
+    assertEquals(true, failingSender.invoked());
+    assertEquals(1, metricsFactory.getCounter("jaeger_tracer_reporter_spans", "result=err"));
   }
 }

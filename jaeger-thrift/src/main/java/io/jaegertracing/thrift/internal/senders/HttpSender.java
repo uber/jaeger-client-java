@@ -19,8 +19,20 @@ import io.jaegertracing.thriftjava.Batch;
 import io.jaegertracing.thriftjava.Process;
 import io.jaegertracing.thriftjava.Span;
 import java.io.IOException;
+import java.net.URI;
+import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
+import java.security.NoSuchAlgorithmException;
+import java.security.KeyManagementException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.X509TrustManager;
+import javax.net.ssl.TrustManager;
 import lombok.ToString;
+import okhttp3.CertificatePinner;
 import okhttp3.Credentials;
 import okhttp3.HttpUrl;
 import okhttp3.Interceptor;
@@ -46,6 +58,7 @@ public class HttpSender extends ThriftSender {
     if (collectorUrl == null) {
       throw new IllegalArgumentException("Could not parse url.");
     }
+
     this.httpClient = builder.clientBuilder.build();
     this.requestBuilder = new Request.Builder().url(collectorUrl);
   }
@@ -83,14 +96,18 @@ public class HttpSender extends ThriftSender {
 
     String exceptionMessage = String.format("Could not send %d spans, response %d: %s",
         spans.size(), response.code(), responseBody);
+
     throw new SenderException(exceptionMessage, null, spans.size());
   }
 
   public static class Builder {
     private final String endpoint;
+    private CertificatePinner.Builder certificatePinnerBuilder = new CertificatePinner.Builder();
     private int maxPacketSize = ONE_MB_IN_BYTES;
     private Interceptor authInterceptor;
     private OkHttpClient.Builder clientBuilder = new OkHttpClient.Builder();
+    private List<String> pins = new ArrayList<String>();
+    private boolean selfSigned = false;
 
     /**
      * @param endpoint jaeger-collector HTTP endpoint e.g. http://localhost:14268/api/traces
@@ -119,11 +136,66 @@ public class HttpSender extends ThriftSender {
       return this;
     }
 
+    public Builder withCertificatePinning(String[] sha256certs) {
+      pins.addAll(Arrays.asList(sha256certs));
+      return this;
+    }
+
+    /**
+     * Enable accepting self-signed certificates. This will only take effect if pinning is provided.
+     */
+    public Builder acceptSelfSigned() {
+      this.selfSigned = true;
+      return this;
+    }
+
     public HttpSender build() {
       if (authInterceptor != null) {
         clientBuilder.addInterceptor(authInterceptor);
       }
+      try {
+        // Just obtain hostname for SSL feature. Failure is OK if plain http is used.
+        final URI uri = new URI(endpoint);
+        String hostname = hostname = uri.getHost();
+
+        if ("https".equals(uri.getScheme())) {
+          if (!selfSigned && !pins.isEmpty()) {
+            // Pinning Certificate issued by public CA
+            for (String cert: pins) {
+              certificatePinnerBuilder.add(hostname, String.format("%s", cert));
+            }
+            clientBuilder.certificatePinner(certificatePinnerBuilder.build());
+          } else if (selfSigned && !pins.isEmpty()) {
+            /* Issued by private CA, OkHttp's pinner is unable to verify the pins.
+             * Instead, check the sha256 hash value by custom verifier. */
+            acceptSelfSigned(clientBuilder, hostname, pins);
+          }
+        }
+      } catch (java.net.URISyntaxException e) {
+        // Early but similar validation & exception as what happens when HttpSender is called.
+        throw new IllegalArgumentException("Could not parse endpoint.", e);
+      }
       return new HttpSender(this);
+    }
+
+    private void acceptSelfSigned(OkHttpClient.Builder clientBuilder, final String hostname, final List<String> pinlist) {
+      try {
+        final TrustManager[] selfSignedServerTrustManager = new TrustManager[] { new SelfSignedTrustManager(hostname, pinlist) };
+        final SSLContext sslContext = SSLContext.getInstance("TLS");
+        sslContext.init(null, selfSignedServerTrustManager, null);
+        clientBuilder.sslSocketFactory(sslContext.getSocketFactory(), (X509TrustManager) selfSignedServerTrustManager[0]);
+
+      } catch (NoSuchAlgorithmException e) {
+          // TLS is hardcoded above. No occasion to come here.
+          throw new RuntimeException(e);
+      } catch (KeyManagementException e) {
+          /* KeyManagementException will not occurs because sslContext uses default KeyManager (first argument).
+           *
+           * > Either of the first two parameters may be null in which case the installed security providers
+           * > will be searched for the highest priority implementation of the appropriate factory.
+           */
+          throw new RuntimeException(e);
+      }
     }
 
     private Interceptor getAuthInterceptor(final String headerValue) {
@@ -138,6 +210,61 @@ public class HttpSender extends ThriftSender {
           );
         }
       };
+    }
+
+    private static class SelfSignedTrustManager implements X509TrustManager {
+      private final String subjectCN;
+      private final List<String> pins;
+
+      protected SelfSignedTrustManager(String hostname, List<String> pins) {
+          this.subjectCN = "CN=" + hostname;
+          this.pins = pins;
+      }
+
+      private boolean check(X509Certificate[] chain) {
+        // Intersection of pins and every cert in this chain
+        for (X509Certificate cert: chain) {
+          String hash = CertificatePinner.pin(cert);
+          for (String pin: pins) {
+            if (hash.equals(pin)) {
+              return true;
+            }
+          }
+        }
+        return false;
+      }
+
+      private String describePins(X509Certificate[] chain) {
+          String message = "No pins matched with remote certificate chain. The pins are:";
+          for (X509Certificate cert: chain) {
+              message = message + "\n\t" + CertificatePinner.pin(cert);
+          }
+          return message + "\n";
+      }
+
+      public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+        for (X509Certificate cert: chain) {
+          String[] subject = cert.getSubjectDN().getName().split("/");
+          for (String name: subject) {
+            if (subjectCN.equals(name)) {
+              // Found endpoint's hostname. This chain is going to be tested.
+              if (check(chain)) {
+                return;
+              } else {
+                // For TOFU (trust on first use) usecase, print the chain
+                throw new RuntimeException(describePins(chain));
+              }
+            }
+          }
+        }
+        throw new CertificateException();
+      }
+      public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+        throw new CertificateException(); // Nothing will be accepted
+      }
+      public X509Certificate[] getAcceptedIssuers() {
+        return new X509Certificate[0];
+      }
     }
   }
 }

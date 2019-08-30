@@ -72,6 +72,7 @@ public class ConfigurationTest {
     System.clearProperty(Configuration.JAEGER_TAGS);
     System.clearProperty(Configuration.JAEGER_ENDPOINT);
     System.clearProperty(Configuration.JAEGER_AUTH_TOKEN);
+    System.clearProperty(Configuration.JAEGER_TLS_CERTIFICATE_PINNING);
     System.clearProperty(Configuration.JAEGER_USER);
     System.clearProperty(Configuration.JAEGER_PASSWORD);
     System.clearProperty(Configuration.JAEGER_PROPAGATION);

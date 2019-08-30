@@ -8,13 +8,14 @@ services:
             - go
             - java-udp
             - java-http
+            - java-https
             - python
             - nodejs
         environment:
-            - WAIT_FOR=test_driver,go,java-udp,java-http,python,nodejs
-            - WAIT_FOR_TIMEOUT=60s
+            - WAIT_FOR=test_driver,go,java-udp,java-http,java-https,python,nodejs,jaeger-collector-https-proxy
+            - WAIT_FOR_TIMEOUT=90s
 
-            - CALL_TIMEOUT=60s
+            - CALL_TIMEOUT=90s
 
             - AXIS_CLIENT=go
             - AXIS_S1NAME=go,java-udp,python,nodejs
@@ -27,7 +28,7 @@ services:
             - BEHAVIOR_TRACE=client,s1name,sampled,s2name,s2transport,s3name,s3transport
 
             - AXIS_TESTDRIVER=test_driver
-            - AXIS_SERVICES=java-udp,java-http
+            - AXIS_SERVICES=java-udp,java-http,java-https
 
             - BEHAVIOR_ENDTOEND=testdriver,services
 
@@ -64,11 +65,31 @@ services:
         environment:
             - SENDER=http
 
+    java-https:
+        build: .
+        ports:
+            - "8080-8082"
+        environment:
+            - SENDER=https
+            - COLLECTOR_HOST_PIN=sha256/n6Ovey/sJws9vKJpESmWyQf9Oocak9J51mmPKGm4S0E=
+        depends_on:
+            - jaeger-collector
+
+    jaeger-collector-https-proxy:
+        build: https-proxy
+        ports:
+            - "8080"
+            - "14443"
+        restart: on-failure
+        depends_on:
+            - jaeger-collector
+
     test_driver:
         image: jaegertracing/test-driver
         depends_on:
             - jaeger-query
             - jaeger-collector
             - jaeger-agent
+            - jaeger-collector-https-proxy
         ports:
             - "8080"
