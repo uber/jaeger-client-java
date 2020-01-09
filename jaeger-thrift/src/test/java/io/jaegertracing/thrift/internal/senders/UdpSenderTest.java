@@ -28,8 +28,14 @@ import io.jaegertracing.thrift.internal.reporters.protocols.JaegerThriftSpanConv
 import io.jaegertracing.thrift.internal.reporters.protocols.TestTServer;
 import io.jaegertracing.thriftjava.Batch;
 import io.jaegertracing.thriftjava.Process;
+import io.jaegertracing.thriftjava.Process;
+import io.jaegertracing.thriftjava.Span;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
+import org.apache.thrift.transport.*;
 import org.awaitility.Awaitility;
 import org.junit.After;
 import org.junit.Before;
@@ -132,7 +138,7 @@ public class UdpSenderTest {
   }
 
   @Test
-  public void testFlushSendsSpan() throws Exception {
+  public void testFlushAppendsSpan() throws Exception {
     int timeout = 50; // in milliseconds
     int expectedNumSpans = 1;
     JaegerSpan expectedSpan = tracer.buildSpan("raza").start();
@@ -159,7 +165,66 @@ public class UdpSenderTest {
   }
 
   @Test
-  public void testFlushSendsSpanWith128BitTraceId() throws Exception {
+  public void testSendSpan() throws Exception {
+    int timeout = 50; // in milliseconds
+    int expectedNumSpans = 10;
+    JaegerSpan expectedSpan = tracer.buildSpan("raza").start();
+    Process process = new Process(tracer.getServiceName())
+            .setTags(JaegerThriftSpanConverter.buildTags(tracer.tags()));
+    List<Span> spans = createSpans(expectedNumSpans, expectedSpan, process);
+    sender.send(process,spans);
+    int flushNum = sender.flush();
+    assertEquals(flushNum, 0);
+
+    Batch batch = server.getBatch(expectedNumSpans, timeout);
+    assertEquals(expectedNumSpans, batch.getSpans().size());
+    io.jaegertracing.thriftjava.Span actualFirstSpan = batch.getSpans().get(0);
+    assertEquals(expectedSpan.context().getTraceIdLow(), actualFirstSpan.getTraceIdLow());
+    assertEquals(0, actualFirstSpan.getTraceIdHigh());
+    assertEquals(expectedSpan.context().getSpanId(), actualFirstSpan.getSpanId());
+    assertEquals(0, actualFirstSpan.getParentSpanId());
+    assertTrue(actualFirstSpan.references.isEmpty());
+    assertEquals(expectedSpan.getOperationName(), actualFirstSpan.getOperationName());
+    assertEquals(4, batch.getProcess().getTags().size());
+    assertEquals("hostname", batch.getProcess().getTags().get(0).getKey());
+    assertEquals("jaeger.version", batch.getProcess().getTags().get(1).getKey());
+    assertEquals("bar", batch.getProcess().getTags().get(2).getVStr());
+    assertEquals("ip", batch.getProcess().getTags().get(3).getKey());
+  }
+
+  @Test(expected = TTransportException.class)
+  public void testSendSpanWithMessageSizeTooLarge() throws Throwable {
+    int expectedNumSpans = 10;
+    int largeMessageLength = 7000;
+    String longOperationName = getStringWithLengthAndFilledWithCharacter(largeMessageLength, 'w');
+    JaegerSpan expectedSpan = tracer.buildSpan(longOperationName).start();
+    Process process = new Process(tracer.getServiceName())
+            .setTags(JaegerThriftSpanConverter.buildTags(tracer.tags()));
+    List<Span> spans = createSpans(expectedNumSpans, expectedSpan, process);
+    try {
+      sender.send(process, spans);
+    } catch(SenderException exception){
+      assertEquals(exception.getCause().toString(),"org.apache.thrift.transport.TTransportException: Message size too large: "+largeMessageLength+" > 65000");
+     throw exception.getCause();
+    }
+  }
+
+  private List<Span> createSpans(int expectedNumSpans, JaegerSpan expectedSpan, Process process) throws Exception {
+    Span span = JaegerThriftSpanConverter.convertSpan(expectedSpan);
+    int processSize = sender.getSize(process);
+    int spanSize = sender.getSize(span);
+    int maxPacketSize = (spanSize * expectedNumSpans+1) + sender.EMIT_BATCH_OVERHEAD + processSize;
+    sender = new UdpSender(destHost, destPort, maxPacketSize);
+    List<Span> spans = new ArrayList<>();
+    for (int i = 0; i < expectedNumSpans; i++) {
+      spans.add(span);
+    }
+    return spans;
+  }
+
+
+  @Test
+  public void testFlushAppendsSpanWith128BitTraceId() throws Exception {
     int timeout = 50; // in milliseconds
     int expectedNumSpans = 1;
     JaegerSpan expectedSpan = tracer128.buildSpan("raza").start();
@@ -177,5 +242,13 @@ public class UdpSenderTest {
   @Test(expected = SenderException.class)
   public void senderFail() throws Exception {
     sender.send(null, Collections.emptyList());
+  }
+  protected String getStringWithLengthAndFilledWithCharacter(int length, char charToFill) {
+    if (length > 0) {
+      char[] array = new char[length];
+      Arrays.fill(array, charToFill);
+      return new String(array);
+    }
+    return "";
   }
 }
