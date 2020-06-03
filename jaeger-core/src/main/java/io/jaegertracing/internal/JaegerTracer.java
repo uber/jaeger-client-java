@@ -71,6 +71,7 @@ public class JaegerTracer implements Tracer, Closeable {
   private final boolean zipkinSharedRpcSpan;
   private final boolean expandExceptionLogs;
   private final boolean useTraceId128Bit;
+  private final boolean allowTraceJoins;
 
   @ToString.Exclude private final PropagationRegistry registry;
   @ToString.Exclude private final Clock clock;
@@ -94,6 +95,7 @@ public class JaegerTracer implements Tracer, Closeable {
     this.expandExceptionLogs = builder.expandExceptionLogs;
     this.objectFactory = builder.objectFactory;
     this.useTraceId128Bit = builder.useTraceId128Bit;
+    this.allowTraceJoins = builder.allowTraceJoins;
 
     this.version = loadVersion();
 
@@ -375,9 +377,7 @@ public class JaegerTracer implements Tracer, Closeable {
       return baggage;
     }
 
-    private JaegerSpanContext createChildContext() {
-      JaegerSpanContext preferredReference = preferredReference();
-
+    private JaegerSpanContext createChildContext(JaegerSpanContext preferredReference) {
       if (isRpcServer()) {
         if (isSampled()) {
           metrics.tracesJoinedSampled.inc(1);
@@ -407,17 +407,27 @@ public class JaegerTracer implements Tracer, Closeable {
       return Tags.SPAN_KIND_SERVER.equals(tags.get(Tags.SPAN_KIND.getKey()));
     }
 
-    private JaegerSpanContext preferredReference() {
-      Reference preferredReference = references.get(0);
+    protected JaegerSpanContext preferredParentReference() {
+      if (references.isEmpty() || !references.get(0).getSpanContext().hasTrace()) {
+        return null;
+      } else if (references.size() == 1) {
+        return references.get(0).getSpanContext();
+      }
+      Reference initial = null;
+      boolean traceJoin = false;
       for (Reference reference: references) {
-        // childOf takes precedence as a preferred parent
-        if (References.CHILD_OF.equals(reference.getType())
-            && !References.CHILD_OF.equals(preferredReference.getType())) {
-          preferredReference = reference;
-          break;
+        if (References.CHILD_OF.equals(reference.getType())) {
+          return reference.getSpanContext();
+        }
+        if (initial == null) {
+          initial = reference;
+        } else if (isAllowTraceJoins()
+            && !(initial.getSpanContext().getTraceIdHigh() == reference.getSpanContext().getTraceIdHigh()
+            && initial.getSpanContext().getTraceIdLow() == reference.getSpanContext().getTraceIdLow())) {
+          traceJoin = true;
         }
       }
-      return preferredReference.getSpanContext();
+      return traceJoin ? null : initial.getSpanContext();
     }
 
     private boolean isSampled() {
@@ -447,10 +457,12 @@ public class JaegerTracer implements Tracer, Closeable {
         asChildOf(scopeManager.activeSpan());
       }
 
-      if (references.isEmpty() || !references.get(0).getSpanContext().hasTrace()) {
+      JaegerSpanContext preferredParentReference = preferredParentReference();
+
+      if (preferredParentReference == null) {
         context = createNewContext();
       } else {
-        context = createChildContext();
+        context = createChildContext(preferredParentReference);
       }
 
       long startTimeNanoTicks = 0;
@@ -539,6 +551,7 @@ public class JaegerTracer implements Tracer, Closeable {
     private final JaegerObjectFactory objectFactory;
     private boolean useTraceId128Bit;
     private boolean manualShutdown;
+    private boolean allowTraceJoins;
 
     public Builder(String serviceName) {
       this(serviceName, new JaegerObjectFactory());
@@ -633,6 +646,11 @@ public class JaegerTracer implements Tracer, Closeable {
 
     public Builder withTraceId128Bit() {
       this.useTraceId128Bit = true;
+      return this;
+    }
+
+    public Builder withTraceJoins() {
+      this.allowTraceJoins = true;
       return this;
     }
 
@@ -737,6 +755,10 @@ public class JaegerTracer implements Tracer, Closeable {
 
   public boolean isUseTraceId128Bit() {
     return this.useTraceId128Bit;
+  }
+
+  public boolean isAllowTraceJoins() {
+    return this.allowTraceJoins;
   }
 
   @Override

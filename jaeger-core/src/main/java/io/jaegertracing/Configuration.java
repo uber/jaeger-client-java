@@ -156,6 +156,11 @@ public class Configuration {
   public static final String JAEGER_TRACEID_128BIT = JAEGER_PREFIX + "TRACEID_128BIT";
 
   /**
+   *  Opt-in to use trace joins. By default, false.
+   */
+  public static final String JAEGER_TRACE_JOINS = JAEGER_PREFIX + "TRACE_JOINS";
+
+  /**
    * The supported trace context propagation formats.
    */
   public enum Propagation {
@@ -186,6 +191,7 @@ public class Configuration {
   private MetricsFactory metricsFactory;
   private Map<String, String> tracerTags;
   private boolean useTraceId128Bit;
+  private boolean allowTraceJoins;
 
   /**
    * lazy singleton JaegerTracer initialized in getTracer() method.
@@ -208,6 +214,7 @@ public class Configuration {
     return new Configuration(serviceName)
             .withTracerTags(tracerTagsFromEnv())
             .withTraceId128Bit(getPropertyAsBool(JAEGER_TRACEID_128BIT))
+            .withTraceJoins(getPropertyAsBool(JAEGER_TRACE_JOINS))
             .withReporter(ReporterConfiguration.fromEnv())
             .withSampler(SamplerConfiguration.fromEnv())
             .withCodec(CodecConfiguration.fromEnv());
@@ -236,6 +243,9 @@ public class Configuration {
         .withTags(tracerTags);
     if (useTraceId128Bit) {
       builder = builder.withTraceId128Bit();
+    }
+    if (allowTraceJoins) {
+      builder = builder.withTraceJoins();
     }
     codecConfig.apply(builder);
     return builder;
@@ -305,6 +315,11 @@ public class Configuration {
 
   public Configuration withTraceId128Bit(boolean useTraceId128Bit) {
     this.useTraceId128Bit = useTraceId128Bit;
+    return this;
+  }
+
+  public Configuration withTraceJoins(boolean allowTraceJoins) {
+    this.allowTraceJoins = allowTraceJoins;
     return this;
   }
 

@@ -77,6 +77,7 @@ public class ConfigurationTest {
     System.clearProperty(Configuration.JAEGER_PASSWORD);
     System.clearProperty(Configuration.JAEGER_PROPAGATION);
     System.clearProperty(Configuration.JAEGER_TRACEID_128BIT);
+    System.clearProperty(Configuration.JAEGER_TRACE_JOINS);
 
     System.clearProperty(TEST_PROPERTY);
   }
@@ -520,6 +521,20 @@ public class ConfigurationTest {
     assertEquals(1, codecConfiguration.getCodecs().get(Builtin.TEXT_MAP).size());
     assertTrue(codecConfiguration.getCodecs().get(Builtin.HTTP_HEADERS).get(0) instanceof B3TextMapCodec);
     assertTrue(codecConfiguration.getCodecs().get(Builtin.TEXT_MAP).get(0) instanceof B3TextMapCodec);
+  }
+
+  @Test
+  public void testAllowTraceJoinsDefault() {
+    System.setProperty(Configuration.JAEGER_SERVICE_NAME, "Test");
+    assertFalse(Configuration.fromEnv().getTracer().isAllowTraceJoins());
+  }
+
+  @Test
+  public void testAllowTraceJoinsTrue() {
+    System.setProperty(Configuration.JAEGER_SERVICE_NAME, "Test");
+    System.setProperty(Configuration.JAEGER_TRACE_JOINS, "true");
+
+    assertTrue(Configuration.fromEnv().getTracer().isAllowTraceJoins());
   }
 
   @SuppressWarnings("unchecked")
