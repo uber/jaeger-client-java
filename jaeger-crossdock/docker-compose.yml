@@ -55,6 +55,7 @@ services:
             - "8080-8082"
 
     java-udp:
+        image: jaegertracing/xdock-java
         build: .
         links:
             - "jaeger:jaeger-agent"

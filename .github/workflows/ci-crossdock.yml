@@ -1,0 +1,47 @@
+name: Crossdock
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  crossdock:
+    runs-on: ubuntu-latest
+    name: Crossdock
+    steps:
+    - uses: actions/checkout@v2
+    
+    - uses: actions/setup-java@v2
+      with:
+        java-version: "1.8"
+    
+    - uses: docker/login-action@v1
+      id: dockerhub-login
+      with:
+        username: jaegertracingbot
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+      env:
+        DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      if: env.DOCKERHUB_TOKEN != null
+    
+    - name: Run Crossdock
+      id: crossdock
+      run: make crossdock-fresh
+
+    - name: Publish crossdock
+      run: |
+        BRANCH=${GITHUB_REF##*/}
+        REPO=jaegertracing/xdock-java
+        TAG=$(if [ "$BRANCH" == "master" ]; then echo "latest"; else echo "${BRANCH///}"; fi)
+        COMMIT=${GITHUB_SHA::8}
+        echo "BRANCH=$BRANCH, REPO=$REPO, TAG=$TAG, COMMIT=$COMMIT"
+        ./gradlew shadowJar
+        docker tag $REPO:$COMMIT $REPO:$TAG
+        docker push $REPO
+      if: |
+        steps.dockerhub-login.outcome == 'success' &&
+        github.event_name != 'pull_request' &&
+        steps.crossdock.outcome == 'success' &&
+        steps.branch-push.outputs.branch == 'master'

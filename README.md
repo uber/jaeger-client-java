@@ -117,9 +117,8 @@ This allows using Jaeger UI to find the trace by this tag.
   
 [Apache 2.0 License](./LICENSE).
 
-
-[ci-img]: https://travis-ci.org/jaegertracing/jaeger-client-java.svg?branch=master
-[ci]: https://travis-ci.org/jaegertracing/jaeger-client-java
+[ci-img]: https://github.com/jaegertracing/jaeger-client-java/workflows/Unit%20Tests/badge.svg?branch=master
+[ci]: https://github.com/jaegertracing/jaeger-client-java/actions?query=branch%3Amaster
 [cov-img]: https://codecov.io/gh/jaegertracing/jaeger-client-java/branch/master/graph/badge.svg
 [cov]: https://codecov.io/github/jaegertracing/jaeger-client-java/
 [maven-img]: https://img.shields.io/maven-central/v/io.jaegertracing/jaeger-core.svg?maxAge=2000

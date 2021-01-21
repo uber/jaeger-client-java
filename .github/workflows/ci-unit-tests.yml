@@ -1,0 +1,75 @@
+name: Unit Tests
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env:
+          - JAVA_VERSION: "1.8"
+            DEPLOY: '1'
+    name: unit-tests - java ${{ matrix.env.JAVA_VERSION }}
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Configure Java Version
+      uses: actions/setup-java@v2
+      with:
+        java-version: ${{ matrix.env.JAVA_VERSION }}
+
+    - name: Create Encryption Key
+      run: |
+        openssl aes-256-cbc -K ${{ secrets.ENCRYPTION_KEY }} -iv ${{ secrets.ENCRYPTION_IV }} -in .github/files/signing-key.asc.enc -out .github/files/signing-key.asc -d
+        gpg --no-tty --batch --allow-secret-key-import --import travis/signing-key.asc
+      if: |
+        ${{ secrets.ENCRYPTION_KEY }} != "" && 
+        ${{ secrets.ENCRYPTION_IV }} != "" &&
+
+    - name: Configure Properties Files
+      run: |
+        rm -rf "$HOME/.gradle/gradle.properties"
+        echo signing.keyId="{{ secrets.SIGNING_KEY_ID }}" > "$HOME/.gradle/gradle.properties"
+        echo signing.password="{{ secrets.SIGNING_KEY_PASSPHRASE }}" >> "$HOME/.gradle/gradle.properties"
+        echo ossrhUsername="{{ secrets.SONATYPE_USERNAME }}" >> "$HOME/.gradle/gradle.properties"
+        echo ossrhPassword="{{ secrets.SONATYPE_PASSWORD }}" >> "$HOME/.gradle/gradle.properties"
+        echo signing.secretKeyRingFile="${HOME}/.gnupg/secring.gpg" >> "$HOME/.gradle/gradle.properties"
+      if: |
+        ${{ secrets.SIGNING_KEY_ID }} != "" &&
+        ${{ secrets.SIGNING_KEY_PASSPHRASE }} != "" &&
+        ${{ secrets.SONATYPE_USERNAME }} != "" &&
+        ${{ secrets.SONATYPE_PASSWORD }} != "" 
+
+    - name: Configure Git Credentials
+      run: |
+        git config user.name "jaegertracingci"
+        git config user.email "jaegertracingci+jaeger-tracing@googlegroups.com"
+        git config credential.helper "store --file=.git/credentials"
+        echo "https://${{ secrets.GH_TOKEN }}:@github.com" > .git/credentials
+
+    - name: Run Unit Tests
+      id: unit-tests
+      run: |
+        make test-travis
+
+    - name: Run Code Coverage
+      id: code-coverage
+      run: ./gradlew codeCoverageReport
+
+    - name: Upload coverage to codecov
+      uses: codecov/codecov-action@v1
+      with:
+        verbose: true
+      if: steps.code-coverage.outcome == 'success'
+
+    - name: Deploy to maven
+      if: |
+        github.event_name != "pull_request" &&
+        steps.unit-tests.outcome == 'success' &&
+        ${{ matrix.env.DEPLOY == '1' }}
+      run: ./gradlew publish

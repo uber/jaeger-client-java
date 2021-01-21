@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'release-*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    name: Release
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+    
+    - uses: actions/setup-java@v2
+      with:
+        java-version: "1.8"
+
+    - name: Get Version
+      id: version
+      run: |
+        version=$(echo ${GITHUB_REF:10} | sed 's/^release-//')
+        echo ::set-output name=version::$version
+    
+    - name: Verify Release
+      id: verify
+      run: |
+        checkoutBranch=$(echo ${GITHUB_REF:10} | sed 's/.[[:digit:]]\+$//')
+        if ! git ls-remote --exit-code --heads origin $checkBranch; then
+          checkoutBranch=master
+        fi
+        git checkout -B $checkoutBranch
+        git fetch origin $checkoutBranch:origin/$checkoutBranch
+        commit_local_master=$(git show --pretty='format:%H' $checkoutBranch)
+        commit_remote_master=$(git show --pretty='format:%H' origin/$checkoutBranch)
+        if [ $commit_local_master != $commit_remote_master ]; then
+          echo "$checkoutBranch on remote 'origin' has commits since the version under release, "$checkoutBranch on remote 'origin' has commits since the version under release, aborting"
+          exit 1
+        fi
+    
+    - name: Publish Release
+      id: publish
+      env:
+        version: ${{ steps.version.outputs.version }}
+      run: |
+        echo "We are on release- tag"
+        echo "Bumping versions and creating v$version tag"
+        echo "Final artifact will be published in build for the tag"
+        ./gradlew release release -Prelease.useAutomaticVersion=true -Prelease.releaseVersion=$version
+      if: steps.verify.outcome == 'success'
+    
+    - name: Generate Changelog
+      id: changelog
+      run: |
+        LATEST_TAG=$(git tag --sort=creatordate | sed '$!d')
+        PREVIOUS_TAG=$(git tag --sort=creatordate | sed 'x;$!d')
+        if [ -z "${PREVIOUS_TAG}" ]; then
+          REV_RANGE=${LATEST_TAG}
+        else
+          REV_RANGE=${PREVIOUS_TAG}..${LATEST_TAG}
+        fi
+        CHANGELOG=$(git log --pretty=format:'- %s -- %an' ${REV_RANGE})
+        echo ::set-output name=changelog::$CHANGELOG
+    
+    - name: Create Release
+      uses: actions/create-release@v1.1.4
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ steps.version.outputs.version }}
+        release_name: "Release ${{ steps.version.outputs.version }}"
+        body: ${{ steps.changelog.outputs.changelog }}
+      if: |
+        steps.changelog.outcome == 'success' &&
+        steps.publish.outcome == 'success'
