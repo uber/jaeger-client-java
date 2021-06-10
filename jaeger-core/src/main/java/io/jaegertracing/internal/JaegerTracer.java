@@ -349,16 +349,12 @@ public class JaegerTracer implements Tracer, Closeable {
       if (debugId != null) {
         flags = (byte) (flags | JaegerSpanContext.flagSampled | JaegerSpanContext.flagDebug);
         tags.put(Constants.DEBUG_ID_HEADER_KEY, debugId);
-        metrics.traceStartedSampled.inc(1);
       } else {
         // TODO: (prithvi) Don't assume operationName is set on creation
         SamplingStatus samplingStatus = sampler.sample(operationName, spanId);
         if (samplingStatus.isSampled()) {
           flags |= JaegerSpanContext.flagSampled;
           tags.putAll(samplingStatus.getTags());
-          metrics.traceStartedSampled.inc(1);
-        } else {
-          metrics.traceStartedNotSampled.inc(1);
         }
       }
 
@@ -464,7 +460,8 @@ public class JaegerTracer implements Tracer, Closeable {
         asChildOf(scopeManager.activeSpan());
       }
 
-      if (references.isEmpty() || !references.get(0).getSpanContext().hasTrace()) {
+      boolean isNewContext = references.isEmpty() || !references.get(0).getSpanContext().hasTrace();
+      if (isNewContext) {
         context = createNewContext();
       } else {
         context = createChildContext();
@@ -492,9 +489,18 @@ public class JaegerTracer implements Tracer, Closeable {
           computeDurationViaNanoTicks,
           tags,
           references);
+
+      //  since context may be changed by explicitly provided sampling tag, we should use context from created span
+      context = jaegerSpan.context();
       if (context.isSampled()) {
+        if (isNewContext) {
+          metrics.traceStartedSampled.inc(1);
+        }
         metrics.spansStartedSampled.inc(1);
       } else {
+        if (isNewContext) {
+          metrics.traceStartedNotSampled.inc(1);
+        }
         metrics.spansStartedNotSampled.inc(1);
       }
       return jaegerSpan;
