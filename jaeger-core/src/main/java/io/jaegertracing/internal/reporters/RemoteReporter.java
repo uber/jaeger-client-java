@@ -41,6 +41,7 @@ public class RemoteReporter implements Reporter {
 
   public static final int DEFAULT_FLUSH_INTERVAL_MS = 1000;
   public static final int DEFAULT_MAX_QUEUE_SIZE = 100;
+  public static final Boolean DEFAULT_IGNORE_SENDER_ERRORS = Boolean.FALSE;
 
   private final Sender sender;
   private final int closeEnqueueTimeout;
@@ -50,11 +51,13 @@ public class RemoteReporter implements Reporter {
   @ToString.Exclude private final Thread queueProcessorThread;
   @ToString.Exclude private final QueueProcessor queueProcessor;
   @ToString.Exclude private final Metrics metrics;
+  @ToString.Exclude private final boolean ignoreSenderErrors;
 
   private RemoteReporter(Sender sender, int flushInterval, int maxQueueSize, int closeEnqueueTimeout,
-      Metrics metrics) {
+      Metrics metrics, boolean ignoreSenderErrors) {
     this.sender = sender;
     this.metrics = metrics;
+    this.ignoreSenderErrors = ignoreSenderErrors;
     this.closeEnqueueTimeout = closeEnqueueTimeout;
     commandQueue = new ArrayBlockingQueue<Command>(maxQueueSize);
 
@@ -187,8 +190,13 @@ public class RemoteReporter implements Reporter {
           } catch (SenderException e) {
             metrics.reporterFailure.inc(e.getDroppedSpanCount());
             if (!failedBefore) {
-              log.warn(commandClass.getSimpleName()
-                      + " execution failed! Repeated errors of this command will not be logged.", e);
+              if (ignoreSenderErrors) {
+                log.debug(commandClass.getSimpleName()
+                        + " execution failed! Repeated errors of this command will not be logged.", e);
+              } else {
+                log.warn(commandClass.getSimpleName()
+                        + " execution failed! Repeated errors of this command will not be logged.", e);
+              }
               commandFailedBefore.add(commandClass);
             }
           }
@@ -209,6 +217,7 @@ public class RemoteReporter implements Reporter {
     private int flushInterval = DEFAULT_FLUSH_INTERVAL_MS;
     private int maxQueueSize = DEFAULT_MAX_QUEUE_SIZE;
     private int closeEnqueTimeout = DEFAULT_CLOSE_ENQUEUE_TIMEOUT_MILLIS;
+    private boolean ignoreSenderErrors = DEFAULT_IGNORE_SENDER_ERRORS;
     private Metrics metrics;
 
     public Builder withFlushInterval(int flushInterval) {
@@ -236,6 +245,11 @@ public class RemoteReporter implements Reporter {
       return this;
     }
 
+    public Builder withIgnoreSenderErrors(Boolean ignoreSenderErrors) {
+      this.ignoreSenderErrors = ignoreSenderErrors;
+      return this;
+    }
+
     public RemoteReporter build() {
       if (sender == null) {
         sender = SenderResolver.resolve();
@@ -243,7 +257,8 @@ public class RemoteReporter implements Reporter {
       if (metrics == null) {
         metrics = new Metrics(new InMemoryMetricsFactory());
       }
-      return new RemoteReporter(sender, flushInterval, maxQueueSize, closeEnqueTimeout, metrics);
+      return new RemoteReporter(sender, flushInterval, maxQueueSize, closeEnqueTimeout, metrics, ignoreSenderErrors);
     }
+
   }
 }

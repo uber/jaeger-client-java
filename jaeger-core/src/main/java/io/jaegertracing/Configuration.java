@@ -112,6 +112,12 @@ public class Configuration {
   public static final String JAEGER_REPORTER_FLUSH_INTERVAL = JAEGER_PREFIX + "REPORTER_FLUSH_INTERVAL";
 
   /**
+   * Whether the reporter should ignore sender errors.
+   */
+  public static final String JAEGER_REPORTER_IGNORE_SENDER_ERRORS = JAEGER_PREFIX + "REPORTER_IGNORE_SENDER_ERRORS";
+  
+
+  /**
    * The sampler type.
    */
   public static final String JAEGER_SAMPLER_TYPE = JAEGER_PREFIX + "SAMPLER_TYPE";
@@ -552,6 +558,7 @@ public class Configuration {
 
   public static class ReporterConfiguration {
     private Boolean logSpans;
+    private Boolean ignoreSenderErrors;
     private Integer flushIntervalMs;
     private Integer maxQueueSize;
     private SenderConfiguration senderConfiguration = new SenderConfiguration();
@@ -564,11 +571,17 @@ public class Configuration {
           .withLogSpans(getPropertyAsBool(JAEGER_REPORTER_LOG_SPANS))
           .withFlushInterval(getPropertyAsInt(JAEGER_REPORTER_FLUSH_INTERVAL))
           .withMaxQueueSize(getPropertyAsInt(JAEGER_REPORTER_MAX_QUEUE_SIZE))
+          .withIgnoreSenderErrors(getPropertyAsBool(JAEGER_REPORTER_IGNORE_SENDER_ERRORS))
           .withSender(SenderConfiguration.fromEnv());
     }
 
     public ReporterConfiguration withLogSpans(Boolean logSpans) {
       this.logSpans = logSpans;
+      return this;
+    }
+
+    public ReporterConfiguration withIgnoreSenderErrors(Boolean ignoreSenderErrors) {
+      this.ignoreSenderErrors = ignoreSenderErrors;
       return this;
     }
 
@@ -593,6 +606,8 @@ public class Configuration {
           .withSender(senderConfiguration.getSender())
           .withFlushInterval(numberOrDefault(this.flushIntervalMs, RemoteReporter.DEFAULT_FLUSH_INTERVAL_MS).intValue())
           .withMaxQueueSize(numberOrDefault(this.maxQueueSize, RemoteReporter.DEFAULT_MAX_QUEUE_SIZE).intValue())
+          .withIgnoreSenderErrors(
+                  booleanOrDefault(this.ignoreSenderErrors, RemoteReporter.DEFAULT_IGNORE_SENDER_ERRORS))
           .build();
 
       if (Boolean.TRUE.equals(this.logSpans)) {
@@ -724,6 +739,10 @@ public class Configuration {
   }
 
   private static Number numberOrDefault(Number value, Number defaultValue) {
+    return value != null ? value : defaultValue;
+  }
+
+  private static Boolean booleanOrDefault(Boolean value, Boolean defaultValue) {
     return value != null ? value : defaultValue;
   }
 
