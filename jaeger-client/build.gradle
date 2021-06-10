@@ -1,3 +1,5 @@
+apply plugin: 'com.github.johnrengelman.shadow'
+
 description = 'Convenience module to be used by instrumented applications'
 
 dependencies {
@@ -7,3 +9,26 @@ dependencies {
 
     testCompile group: 'junit', name: 'junit', version: junitVersion
 }
+
+/* Shaded the same libraries as jaeger-thrift,
+ * for a standalone fat jar. */
+shadowJar {
+    relocate 'com.google.gson'  , 'io.jaegertracing.vendor.com.google.gson'
+    relocate 'com.twitter'      , 'io.jaegertracing.vendor.com.twitter'
+    relocate 'okhttp'           , 'io.jaegertracing.vendor.okhttp'
+    relocate 'okio'             , 'io.jaegertracing.vendor.okio'
+    relocate 'org.apache'       , 'io.jaegertracing.vendor.org.apache'
+    classifier 'all'
+    dependencies {
+        exclude(dependency('org.projectlombok:lombok'))
+        exclude(dependency('org.codehaus.mojo:animal-sniffer-annotations'))
+    }
+}
+
+artifacts {
+    archives(shadowJar.archivePath) {
+        builtBy shadowJar
+    }
+}
+
+tasks.check.dependsOn tasks.shadowJar
