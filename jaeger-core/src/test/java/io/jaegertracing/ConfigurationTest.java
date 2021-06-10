@@ -69,6 +69,7 @@ public class ConfigurationTest {
     System.clearProperty(Configuration.JAEGER_SAMPLER_TYPE);
     System.clearProperty(Configuration.JAEGER_SAMPLER_PARAM);
     System.clearProperty(Configuration.JAEGER_SAMPLER_MANAGER_HOST_PORT);
+    System.clearProperty(Configuration.JAEGER_CONFIG_MANAGER_ENDPOINT);
     System.clearProperty(Configuration.JAEGER_SERVICE_NAME);
     System.clearProperty(Configuration.JAEGER_TAGS);
     System.clearProperty(Configuration.JAEGER_ENDPOINT);
@@ -116,6 +117,42 @@ public class ConfigurationTest {
     SamplerConfiguration samplerConfig = SamplerConfiguration.fromEnv();
     assertEquals(ConstSampler.TYPE, samplerConfig.getType());
     assertNull(samplerConfig.getParam());
+  }
+
+  @Test
+  public void testConfigManagerUrl() {
+    System.setProperty(Configuration.JAEGER_CONFIG_MANAGER_ENDPOINT, "http://example.com/sampling");
+    SamplerConfiguration samplerConfig = SamplerConfiguration.fromEnv();
+    assertEquals("http://example.com/sampling", samplerConfig.getServerUrl());
+  }
+
+  @Test
+  public void testConfigManagerUrlOverridesSamplerManagerHostPort() {
+    System.setProperty(Configuration.JAEGER_CONFIG_MANAGER_ENDPOINT, "http://example.com/sampling");
+    System.setProperty(Configuration.JAEGER_SAMPLER_MANAGER_HOST_PORT, "example.org:80");
+    SamplerConfiguration samplerConfig = SamplerConfiguration.fromEnv();
+    assertEquals("http://example.com/sampling", samplerConfig.getServerUrl());
+  }
+
+  @Test
+  public void testSamplerManagerHostPortOverridesAgentHost() {
+    System.setProperty(Configuration.JAEGER_SAMPLER_MANAGER_HOST_PORT, "example.org:80");
+    System.setProperty(Configuration.JAEGER_AGENT_HOST, "example.com");
+    SamplerConfiguration samplerConfig = SamplerConfiguration.fromEnv();
+    assertEquals("http://example.org:80/sampling", samplerConfig.getServerUrl());
+  }
+
+  @Test
+  public void testAgentHostOverridesDefault() {
+    System.setProperty(Configuration.JAEGER_AGENT_HOST, "example.com");
+    SamplerConfiguration samplerConfig = SamplerConfiguration.fromEnv();
+    assertEquals("http://example.com:5778/sampling", samplerConfig.getServerUrl());
+  }
+
+  @Test
+  public void testSettingManagerHostPortProducesUrl() {
+    SamplerConfiguration samplerConfig = SamplerConfiguration.fromEnv().withManagerHostPort("example.com:80");
+    assertEquals("http://example.com:80/sampling", samplerConfig.getServerUrl());
   }
 
   @Test

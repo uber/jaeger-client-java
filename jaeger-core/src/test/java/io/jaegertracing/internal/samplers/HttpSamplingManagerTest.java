@@ -67,7 +67,7 @@ public class HttpSamplingManagerTest extends JerseyTest {
   @Test
   public void testGetSamplingStrategy() throws Exception {
     URI uri = target().getUri();
-    undertest = new HttpSamplingManager(uri.getHost() + ":" + uri.getPort());
+    undertest = new HttpSamplingManager("http://" + uri.getHost() + ":" + uri.getPort());
     SamplingStrategyResponse response = undertest.getSamplingStrategy("clairvoyant");
     assertNotNull(response.getProbabilisticSampling());
   }

@@ -127,6 +127,11 @@ public class Configuration {
   public static final String JAEGER_SAMPLER_MANAGER_HOST_PORT = JAEGER_PREFIX + "SAMPLER_MANAGER_HOST_PORT";
 
   /**
+   * The config manager endpoint URL.
+   */
+  public static final String JAEGER_CONFIG_MANAGER_ENDPOINT = JAEGER_PREFIX + "CONFIG_MANAGER_ENDPOINT";
+
+  /**
    * The service name.
    */
   public static final String JAEGER_SERVICE_NAME = JAEGER_PREFIX + "SERVICE_NAME";
@@ -355,26 +360,36 @@ public class Configuration {
     private Number param;
 
     /**
-     * HTTP host:port of the sampling manager that can provide sampling strategy to this service.
+     * HTTP URL of the sampling manager that can provide sampling strategy to this service.
      * Optional.
      */
-    private String managerHostPort;
+    private String serverUrl;
 
     public SamplerConfiguration() {
     }
 
     public static SamplerConfiguration fromEnv() {
+      String configManagerEndpoint = getProperty(JAEGER_CONFIG_MANAGER_ENDPOINT);
+      if (configManagerEndpoint == null) {
+        if (getProperty(JAEGER_SAMPLER_MANAGER_HOST_PORT) != null) {
+          configManagerEndpoint = "http://" + getProperty(JAEGER_SAMPLER_MANAGER_HOST_PORT) + "/sampling";
+        } else if (getProperty(JAEGER_AGENT_HOST) != null) {
+          configManagerEndpoint = "http://" + getProperty(JAEGER_AGENT_HOST) + ":"
+                  + HttpSamplingManager.DEFAULT_SERVER_PORT + "/sampling";
+        }
+      }
+
       return new SamplerConfiguration()
           .withType(getProperty(JAEGER_SAMPLER_TYPE))
           .withParam(getPropertyAsNum(JAEGER_SAMPLER_PARAM))
-          .withManagerHostPort(getProperty(JAEGER_SAMPLER_MANAGER_HOST_PORT));
+          .withServerUrl(configManagerEndpoint);
     }
 
     // for tests
     Sampler createSampler(String serviceName, Metrics metrics) {
       String samplerType = stringOrDefault(this.getType(), RemoteControlledSampler.TYPE);
       Number samplerParam = numberOrDefault(this.getParam(), ProbabilisticSampler.DEFAULT_SAMPLING_PROBABILITY);
-      String hostPort = stringOrDefault(this.getManagerHostPort(), HttpSamplingManager.DEFAULT_HOST_PORT);
+      String serverUrl = stringOrDefault(this.getServerUrl(), HttpSamplingManager.DEFAULT_SERVER_URL);
 
       if (samplerType.equals(ConstSampler.TYPE)) {
         return new ConstSampler(samplerParam.intValue() != 0);
@@ -390,7 +405,7 @@ public class Configuration {
 
       if (samplerType.equals(RemoteControlledSampler.TYPE)) {
         return new RemoteControlledSampler.Builder(serviceName)
-            .withSamplingManager(new HttpSamplingManager(hostPort))
+            .withSamplingManager(new HttpSamplingManager(serverUrl))
             .withInitialSampler(new ProbabilisticSampler(samplerParam.doubleValue()))
             .withMetrics(metrics)
             .build();
@@ -407,8 +422,8 @@ public class Configuration {
       return param;
     }
 
-    public String getManagerHostPort() {
-      return managerHostPort;
+    public String getServerUrl() {
+      return serverUrl;
     }
 
     public SamplerConfiguration withType(String type) {
@@ -421,8 +436,17 @@ public class Configuration {
       return this;
     }
 
+    /**
+     * @deprecated Use {@link #withServerUrl(String)} instead
+     */
+    @Deprecated
     public SamplerConfiguration withManagerHostPort(String managerHostPort) {
-      this.managerHostPort = managerHostPort;
+      this.serverUrl = "http://" + managerHostPort + "/sampling";
+      return this;
+    }
+
+    public SamplerConfiguration withServerUrl(String serverUrl) {
+      this.serverUrl = serverUrl;
       return this;
     }
   }
