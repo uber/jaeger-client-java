@@ -14,8 +14,6 @@
 
 package io.jaegertracing.spi;
 
-import io.jaegertracing.internal.samplers.SamplingStatus;
-
 /**
  * Sampler is responsible for deciding if a new trace should be sampled and captured for storage.
  */

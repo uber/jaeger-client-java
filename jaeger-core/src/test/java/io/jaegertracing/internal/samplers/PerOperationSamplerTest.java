@@ -26,6 +26,7 @@ import static org.mockito.Mockito.when;
 import io.jaegertracing.internal.samplers.http.OperationSamplingParameters;
 import io.jaegertracing.internal.samplers.http.PerOperationSamplingParameters;
 import io.jaegertracing.internal.samplers.http.ProbabilisticSamplingStrategy;
+import io.jaegertracing.spi.SamplingStatus;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;

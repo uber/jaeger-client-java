@@ -17,6 +17,7 @@ package io.jaegertracing.internal.samplers;
 import io.jaegertracing.internal.samplers.http.OperationSamplingParameters;
 import io.jaegertracing.internal.samplers.http.PerOperationSamplingParameters;
 import io.jaegertracing.spi.Sampler;
+import io.jaegertracing.spi.SamplingStatus;
 import java.util.HashMap;
 import java.util.Map;
 import lombok.AccessLevel;

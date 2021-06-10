@@ -19,6 +19,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import io.jaegertracing.internal.Constants;
+import io.jaegertracing.spi.SamplingStatus;
 import java.util.Map;
 import org.junit.After;
 import org.junit.Assert;

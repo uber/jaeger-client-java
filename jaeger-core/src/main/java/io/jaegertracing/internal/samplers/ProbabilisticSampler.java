@@ -16,6 +16,7 @@ package io.jaegertracing.internal.samplers;
 
 import io.jaegertracing.internal.Constants;
 import io.jaegertracing.spi.Sampler;
+import io.jaegertracing.spi.SamplingStatus;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;

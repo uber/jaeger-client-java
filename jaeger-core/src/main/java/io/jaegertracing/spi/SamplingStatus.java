@@ -12,7 +12,7 @@
  * the License.
  */
 
-package io.jaegertracing.internal.samplers;
+package io.jaegertracing.spi;
 
 import java.util.Map;
 import lombok.Value;
