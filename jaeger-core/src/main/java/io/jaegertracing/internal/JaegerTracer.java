@@ -29,6 +29,7 @@ import io.jaegertracing.internal.propagation.TextMapCodec;
 import io.jaegertracing.internal.reporters.RemoteReporter;
 import io.jaegertracing.internal.samplers.RemoteControlledSampler;
 import io.jaegertracing.internal.samplers.SamplingStatus;
+import io.jaegertracing.internal.samplers.TagSamplerWrapper;
 import io.jaegertracing.internal.utils.Utils;
 import io.jaegertracing.spi.BaggageRestrictionManager;
 import io.jaegertracing.spi.Extractor;
@@ -36,6 +37,7 @@ import io.jaegertracing.spi.Injector;
 import io.jaegertracing.spi.MetricsFactory;
 import io.jaegertracing.spi.Reporter;
 import io.jaegertracing.spi.Sampler;
+import io.jaegertracing.spi.TagSampler;
 import io.opentracing.References;
 import io.opentracing.Scope;
 import io.opentracing.ScopeManager;
@@ -67,7 +69,7 @@ public class JaegerTracer implements Tracer, Closeable {
   private final String version;
   private final String serviceName;
   private final Reporter reporter;
-  private final Sampler sampler;
+  private final TagSampler sampler;
   private final Map<String, ?> tags;
   private final boolean zipkinSharedRpcSpan;
   private final boolean expandExceptionLogs;
@@ -352,7 +354,7 @@ public class JaegerTracer implements Tracer, Closeable {
         metrics.traceStartedSampled.inc(1);
       } else {
         // TODO: (prithvi) Don't assume operationName is set on creation
-        SamplingStatus samplingStatus = sampler.sample(operationName, spanId);
+        SamplingStatus samplingStatus = sampler.sample(operationName, spanId, tags);
         if (samplingStatus.isSampled()) {
           flags |= JaegerSpanContext.flagSampled;
           tags.putAll(samplingStatus.getTags());
@@ -545,7 +547,7 @@ public class JaegerTracer implements Tracer, Closeable {
    * Builds a {@link JaegerTracer} with options.
    */
   public static class Builder {
-    private Sampler sampler;
+    private TagSampler sampler;
     private Reporter reporter;
     private final PropagationRegistry registry = new PropagationRegistry();
     private Metrics metrics = new Metrics(new NoopMetricsFactory());
@@ -602,6 +604,14 @@ public class JaegerTracer implements Tracer, Closeable {
      * @param sampler sampler.
      */
     public Builder withSampler(Sampler sampler) {
+      this.sampler = new TagSamplerWrapper(sampler);
+      return this;
+    }
+
+    /**
+     * @param sampler sampler.
+     */
+    public Builder withSampler(TagSampler sampler) {
       this.sampler = sampler;
       return this;
     }
@@ -696,9 +706,9 @@ public class JaegerTracer implements Tracer, Closeable {
             .build();
       }
       if (sampler == null) {
-        sampler = new RemoteControlledSampler.Builder(serviceName)
+        sampler = new TagSamplerWrapper(new RemoteControlledSampler.Builder(serviceName)
             .withMetrics(metrics)
-            .build();
+            .build());
       }
       return createTracer();
     }
