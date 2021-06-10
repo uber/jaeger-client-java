@@ -124,7 +124,7 @@ public class Configuration {
   /**
    * The sampler manager host:port.
    */
-  public static final String JAEGER_SAMPLER_MANAGER_HOST_PORT = JAEGER_PREFIX + "SAMPLER_MANAGER_HOST_PORT";
+  public static final String JAEGER_CONFIG_MGR_HOST_PORT = JAEGER_PREFIX + "SAMPLER_MANAGER_HOST_PORT";
 
   /**
    * The service name.
@@ -367,7 +367,7 @@ public class Configuration {
       return new SamplerConfiguration()
           .withType(getProperty(JAEGER_SAMPLER_TYPE))
           .withParam(getPropertyAsNum(JAEGER_SAMPLER_PARAM))
-          .withManagerHostPort(getProperty(JAEGER_SAMPLER_MANAGER_HOST_PORT));
+          .withManagerHostPort(getProperty(JAEGER_CONFIG_MGR_HOST_PORT));
     }
 
     // for tests

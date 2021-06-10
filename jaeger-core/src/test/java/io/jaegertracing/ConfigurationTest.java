@@ -68,7 +68,7 @@ public class ConfigurationTest {
     System.clearProperty(Configuration.JAEGER_REPORTER_FLUSH_INTERVAL);
     System.clearProperty(Configuration.JAEGER_SAMPLER_TYPE);
     System.clearProperty(Configuration.JAEGER_SAMPLER_PARAM);
-    System.clearProperty(Configuration.JAEGER_SAMPLER_MANAGER_HOST_PORT);
+    System.clearProperty(Configuration.JAEGER_CONFIG_MGR_HOST_PORT);
     System.clearProperty(Configuration.JAEGER_SERVICE_NAME);
     System.clearProperty(Configuration.JAEGER_TAGS);
     System.clearProperty(Configuration.JAEGER_ENDPOINT);
