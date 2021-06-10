@@ -1,0 +1,41 @@
+name: Publish
+
+on:
+  push:
+    branches: [ master ]
+    tags: [ 'release-*' ]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+
+    - uses: actions/setup-java@v1
+      with:
+        java-version: 8
+
+    - name: Export BRANCH variable
+      uses: ./.github/actions/setup-branch
+
+    - name: Configure git credentials
+      run: |
+        git config user.name "jaegertracingci"
+        git config user.email "jaegertracingci+jaeger-tracing@googlegroups.com"
+        git config credential.helper "store --file=.git/credentials"
+        echo "https://${{ secrets.GITHUB_TOKEN }}:@github.com" > .git/credentials
+
+    - name: Prepare for gpg signing
+      run: bash scripts/prepare-signing.sh
+      env:
+        ENCRYPTION_IV: ${{ secrets.ENCRYPTION_IV }}
+        ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+        SIGNING_KEY_ID: ${{ secrets.SIGNING_KEY_ID }}
+        SIGNING_KEY_PASSPHRASE: ${{ secrets.SIGNING_KEY_PASSPHRASE }}
+        SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+        SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+
+    - name: Publish to sonatype
+      run: bash scripts/deploy.sh
